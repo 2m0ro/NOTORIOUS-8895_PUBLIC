@@ -135,7 +135,7 @@ void panic(const char *fmt, ...)
 	{
 		extern u64 *__boot_kernel_offset;
 		u64 *kernel_addr = (u64 *) &__boot_kernel_offset;
-		
+
 		pr_emerg("Kernel loaded at: 0x%llx, offset from compile-time address %llx\n",
 		(u64)((u64)kernel_addr[1] + (u64)kernel_addr[0]), (u64)((u64)kernel_addr[1] - (u64)kernel_addr[2]));
 	}
@@ -149,7 +149,9 @@ void panic(const char *fmt, ...)
 	if (!test_taint(TAINT_DIE) && oops_in_progress <= 1)
 		dump_stack();
 #endif
+#ifdef CONFIG_SCHED_DEBUG
 	sysrq_sched_debug_show();
+#endif
 	/*
 	 * If we have crashed and we have a crash kernel loaded let it handle
 	 * everything else.
@@ -209,7 +211,7 @@ void panic(const char *fmt, ...)
 		 * Delay timeout seconds before rebooting the machine.
 		 * We can't use the "normal" timers since we just panicked.
 		 */
-		pr_emerg("Rebooting in %d seconds..", panic_timeout);
+		pr_emerg("Rebooting in %d seconds..\n", panic_timeout);
 
 		for (i = 0; i < panic_timeout * 1000; i += PANIC_TIMER_STEP) {
 			touch_nmi_watchdog();

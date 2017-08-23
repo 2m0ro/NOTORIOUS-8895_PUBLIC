@@ -636,6 +636,13 @@ static inline struct cfq_group *cfqg_parent(struct cfq_group *cfqg)
 	return pblkg ? blkg_to_cfqg(pblkg) : NULL;
 }
 
+static inline bool cfqg_is_descendant(struct cfq_group *cfqg,
+				      struct cfq_group *ancestor)
+{
+	return cgroup_is_descendant(cfqg_to_blkg(cfqg)->blkcg->css.cgroup,
+				    cfqg_to_blkg(ancestor)->blkcg->css.cgroup);
+}
+
 static inline void cfqg_get(struct cfq_group *cfqg)
 {
 	return blkg_get(cfqg_to_blkg(cfqg));
@@ -762,6 +769,11 @@ static void cfqg_stats_xfer_dead(struct cfq_group *cfqg)
 #else	/* CONFIG_CFQ_GROUP_IOSCHED */
 
 static inline struct cfq_group *cfqg_parent(struct cfq_group *cfqg) { return NULL; }
+static inline bool cfqg_is_descendant(struct cfq_group *cfqg,
+				      struct cfq_group *ancestor)
+{
+	return true;
+}
 static inline void cfqg_get(struct cfq_group *cfqg) { }
 static inline void cfqg_put(struct cfq_group *cfqg) { }
 
@@ -1576,7 +1588,7 @@ static struct blkcg_policy_data *cfq_cpd_alloc(gfp_t gfp)
 {
 	struct cfq_group_data *cgd;
 
-	cgd = kzalloc(sizeof(*cgd), GFP_KERNEL);
+	cgd = kzalloc(sizeof(*cgd), gfp);
 	if (!cgd)
 		return NULL;
 	return &cgd->cpd;
@@ -2904,6 +2916,7 @@ static bool cfq_should_idle(struct cfq_data *cfqd, struct cfq_queue *cfqq)
 static void cfq_arm_slice_timer(struct cfq_data *cfqd)
 {
 	struct cfq_queue *cfqq = cfqd->active_queue;
+	struct cfq_rb_root *st = cfqq->service_tree;
 	struct cfq_io_cq *cic;
 	unsigned long sl, group_idle = 0;
 
@@ -2954,8 +2967,13 @@ static void cfq_arm_slice_timer(struct cfq_data *cfqd)
 		return;
 	}
 
-	/* There are other queues in the group, don't do group idle */
-	if (group_idle && cfqq->cfqg->nr_cfqq > 1)
+	/*
+	 * There are other queues in the group or this is the only group and
+	 * it has too big thinktime, don't do group idle.
+	 */
+	if (group_idle &&
+	    (cfqq->cfqg->nr_cfqq > 1 ||
+	     cfq_io_thinktime_big(cfqd, &st->ttime, true)))
 		return;
 
 	cfq_mark_cfqq_wait_request(cfqq);
@@ -3010,6 +3028,7 @@ static struct request *cfq_check_fifo(struct cfq_queue *cfqq)
 	if (time_before(jiffies, rq->fifo_time))
 		rq = NULL;
 
+	cfq_log_cfqq(cfqq->cfqd, cfqq, "fifo=%p", rq);
 	return rq;
 }
 
@@ -3383,9 +3402,6 @@ static bool cfq_may_dispatch(struct cfq_data *cfqd, struct cfq_queue *cfqq)
 {
 	unsigned int max_dispatch;
 
-	if (cfq_cfqq_must_dispatch(cfqq))
-		return true;
-
 	/*
 	 * Drain async requests before we start sync IO
 	 */
@@ -3484,20 +3500,15 @@ static bool cfq_dispatch_request(struct cfq_data *cfqd, struct cfq_queue *cfqq)
 
 	BUG_ON(RB_EMPTY_ROOT(&cfqq->sort_list));
 
-	rq = cfq_check_fifo(cfqq);
-	if (rq)
-		cfq_mark_cfqq_must_dispatch(cfqq);
-
 	if (!cfq_may_dispatch(cfqd, cfqq))
 		return false;
 
 	/*
 	 * follow expired path, else get first next available
 	 */
+	rq = cfq_check_fifo(cfqq);
 	if (!rq)
 		rq = cfqq->next_rq;
-	else
-		cfq_log_cfqq(cfqq->cfqd, cfqq, "fifo=%p", rq);
 
 	/*
 	 * insert request into driver dispatch list
@@ -3968,19 +3979,30 @@ cfq_should_preempt(struct cfq_data *cfqd, struct cfq_queue *new_cfqq,
 	 * if the new request is sync, but the currently running queue is
 	 * not, let the sync request have priority.
 	 */
-	if (rq_is_sync(rq) && !cfq_cfqq_sync(cfqq) && !cfq_cfqq_must_dispatch(cfqq))
+	if (rq_is_sync(rq) && !cfq_cfqq_sync(cfqq))
 		return true;
 
-	if (new_cfqq->cfqg != cfqq->cfqg)
+	/*
+	 * Treat ancestors of current cgroup the same way as current cgroup.
+	 * For anybody else we disallow preemption to guarantee service
+	 * fairness among cgroups.
+	 */
+	if (!cfqg_is_descendant(cfqq->cfqg, new_cfqq->cfqg))
 		return false;
 
 	if (cfq_slice_used(cfqq))
 		return true;
 
+	/*
+	 * Allow an RT request to pre-empt an ongoing non-RT cfqq timeslice.
+	 */
+	if (cfq_class_rt(new_cfqq) && !cfq_class_rt(cfqq))
+		return true;
+
+	WARN_ON_ONCE(cfqq->ioprio_class != new_cfqq->ioprio_class);
 	/* Allow preemption only if we are idling on sync-noidle tree */
 	if (cfqd->serving_wl_type == SYNC_NOIDLE_WORKLOAD &&
 	    cfqq_type(new_cfqq) == SYNC_NOIDLE_WORKLOAD &&
-	    new_cfqq->service_tree->count == 2 &&
 	    RB_EMPTY_ROOT(&cfqq->sort_list))
 		return true;
 
@@ -3989,12 +4011,6 @@ cfq_should_preempt(struct cfq_data *cfqd, struct cfq_queue *new_cfqq,
 	 * it's a metadata request and the current queue is doing regular IO.
 	 */
 	if ((rq->cmd_flags & REQ_PRIO) && !cfqq->prio_pending)
-		return true;
-
-	/*
-	 * Allow an RT request to pre-empt an ongoing non-RT cfqq timeslice.
-	 */
-	if (cfq_class_rt(new_cfqq) && !cfq_class_rt(cfqq))
 		return true;
 
 	/* An idle queue should not be idle now for some reason */

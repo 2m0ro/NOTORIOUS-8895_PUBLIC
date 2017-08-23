@@ -453,9 +453,11 @@ struct sock {
     /* START_OF_KNOX_VPN */
     uid_t           knox_uid;
     pid_t           knox_pid;
-    __be32          inet_src_masq;
+    __be32          sk_udp_daddr;
+    __be32          sk_udp_saddr;
+    __be16          sk_udp_dport;
+    __be16          sk_udp_sport;
     char domain_name[255];
-    __u64   open_time;
     /* END_OF_KNOX_VPN */
 	void			(*sk_state_change)(struct sock *sk);
 	void			(*sk_data_ready)(struct sock *sk);
@@ -1450,6 +1452,16 @@ static inline void sk_mem_uncharge(struct sock *sk, int size)
 	if (!sk_has_account(sk))
 		return;
 	sk->sk_forward_alloc += size;
+
+	/* Avoid a possible overflow.
+	 * TCP send queues can make this happen, if sk_mem_reclaim()
+	 * is not called and more than 2 GBytes are released at once.
+	 *
+	 * If we reach 2 MBytes, reclaim 1 MBytes right now, there is
+	 * no need to hold that much forward allocation anyway.
+	 */
+	if (unlikely(sk->sk_forward_alloc >= 1 << 21))
+		__sk_mem_reclaim(sk, 1 << 20);
 }
 
 static inline void sk_wmem_free_skb(struct sock *sk, struct sk_buff *skb)

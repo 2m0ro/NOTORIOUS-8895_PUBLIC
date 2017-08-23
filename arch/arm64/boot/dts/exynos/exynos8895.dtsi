@@ -223,7 +223,7 @@
 			enable-method = "psci";
 			cpu-idle-states = <&NONBOOTCL_CPU_SLEEP>;
 			#cooling-cells = <2>; /* min followed by max */
-			current = <445650 355850 295970 251060 233620 201350 177320 137850 111850 100000 88090 78470 69380 58880>;
+			current = <355850 295970 251060 233620 201350 177320 137850 111850 100000 88090 78470 69380 58880>;
 		};
 		cpu@1 {
 			device_type = "cpu";
@@ -232,7 +232,7 @@
 			logical-id = <5>;
 			enable-method = "psci";
 			cpu-idle-states = <&NONBOOTCL_CPU_SLEEP>;
-			current = <445650 355850 295970 251060 233620 201350 177320 137850 111850 100000 88090 78470 69380 58880>;
+			current = <355850 295970 251060 233620 201350 177320 137850 111850 100000 88090 78470 69380 58880>;
 		};
 		cpu@2 {
 			device_type = "cpu";
@@ -241,7 +241,7 @@
 			logical-id = <6>;
 			enable-method = "psci";
 			cpu-idle-states = <&NONBOOTCL_CPU_SLEEP>;
-			current = <445650 355850 295970 251060 233620 201350 177320 137850 111850 100000 88090 78470 69380 58880>;
+			current = <355850 295970 251060 233620 201350 177320 137850 111850 100000 88090 78470 69380 58880>;
 		};
 		cpu@3 {
 			device_type = "cpu";
@@ -250,7 +250,7 @@
 			logical-id = <7>;
 			enable-method = "psci";
 			cpu-idle-states = <&NONBOOTCL_CPU_SLEEP>;
-			current = <445650 355850 295970 251060 233620 201350 177320 137850 111850 100000 88090 78470 69380 58880>;
+			current = <355850 295970 251060 233620 201350 177320 137850 111850 100000 88090 78470 69380 58880>;
 		};
 
 		idle-states {
@@ -515,6 +515,7 @@
 			cal-id = <ACPM_DVFS_CPUCL0>;
 			dm-type = <DM_CPU_CL1>;
 
+			max-freq = <2652000>;
 			min-freq = <741000>;
 
 			/* PM QoS Class ID*/
@@ -1023,10 +1024,10 @@
 			#address-cells = <2>;
 			#size-cells = <1>;
 			ranges;
-			
+
 			reg =
 				<0x0 0x11020700 0x4>;
-			
+
 			mask = <(BIT_8 | BIT_9)>;
 			bits = <(BIT_8 | BIT_9)>;
 		};
@@ -4493,10 +4494,10 @@
 		/* gpu cooling related table */
 		/* flags, driver_data(index), frequency */
 		gpu_idx_num = <6>;
-		gpu_cooling_table = < 0 0 546000
-				      0 1 455000
-				      0 2 385000
-				      0 3 338000
+		gpu_cooling_table = < 0 0 559000
+				      0 1 467000
+				      0 2 397000
+				      0 3 350000
 				      0 4 260000
 				      0 5 TABLE_END>;
 		#include "exynos8895-tmu-sensor-conf.dtsi"
@@ -4782,7 +4783,7 @@
 
 			/* Frequency table */
 			/* for level	:	1_Head */
-			input_booster,cpu_freqs = <1066000>;
+			input_booster,cpu_freqs = <858000>;
 			input_booster,hmp_boost = <1>;
 			input_booster,kfc_freqs = <0>;
 			input_booster,mif_freqs = <0>;
@@ -4922,11 +4923,28 @@
 			input_booster,int_freqs = <0 0>;
 
 			/* Time table */
-			input_booster,head_times = <130 0>;
-			input_booster,tail_times = <0 500>;
+			input_booster,head_times = <0 0>;
+			input_booster,tail_times = <0 0>;
 			input_booster,phase_times = <0 0>;
 		};
 		booster_key@9 {
+			input_booster,label = "PEN";
+			input_booster,type = <8>;	/* BOOSTER_DEVICE_MOUSE */
+
+			input_booster,levels = <1 2>;
+
+			/* Frequency table */
+			/* for level	:	1_Head 2_Tail*/
+			input_booster,cpu_freqs = <1469000 858000>;
+			input_booster,hmp_boost = <1 1>;
+			input_booster,kfc_freqs = <832000 832000>;
+			input_booster,bimc_freqs = <0 0>;
+
+			/* Time table */
+			input_booster,head_times = <0 0>;
+			input_booster,tail_times = <0 0>;
+		};
+		booster_key@10 {
 			input_booster,label = "KEY_TWO";
 			input_booster,type = <9>;	/* BOOSTER_DEVICE_KEY */
 
@@ -4934,7 +4952,7 @@
 
 			/* Frequency table */
 			/* for level	:	1_Head */
-			input_booster,cpu_freqs = <1469000>;
+			input_booster,cpu_freqs = <962000>;
 			input_booster,hmp_boost = <1>;
 			input_booster,kfc_freqs = <0>;
 			input_booster,mif_freqs = <0>;

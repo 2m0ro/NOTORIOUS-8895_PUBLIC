@@ -21,7 +21,7 @@ config ARM64
 	select ARM_GIC_V3
 	select ARM_GIC_V3_ITS if PCI_MSI
 	select ARM_PSCI_FW
-	select BUILDTIME_EXTABLE_SORT
+	select BUILDTIME_EXTABLE_SORT if !RELOCATABLE_KERNEL
 	select CLONE_BACKWARDS
 	select COMMON_CLK
 	select CPU_PM if (SUSPEND || CPU_IDLE)
@@ -430,6 +430,15 @@ config CAVIUM_ERRATUM_22375
 
 	  If unsure, say Y.
 
+config CAVIUM_ERRATUM_23144
+	bool "Cavium erratum 23144: ITS SYNC hang on dual socket system"
+	depends on NUMA
+	default y
+	help
+	  ITS SYNC command hang for cross node io and collections/cpu mapping.
+
+	  If unsure, say Y.
+
 config CAVIUM_ERRATUM_23154
 	bool "Cavium erratum 23154: Access to ICC_IAR1_EL1 is not sync'ed"
 	default y
@@ -437,6 +446,17 @@ config CAVIUM_ERRATUM_23154
 	  The gicv3 of ThunderX requires a modified version for
 	  reading the IAR status to ensure data synchronization
 	  (access to icc_iar1_el1 is not sync'ed before and after).
+
+	  If unsure, say Y.
+
+config CAVIUM_ERRATUM_27456
+	bool "Cavium erratum 27456: Broadcast TLBI instructions may cause icache corruption"
+	default y
+	help
+	  On ThunderX T88 pass 1.x through 2.1 parts, broadcast TLBI
+	  instructions may cause the icache to become corrupted if it
+	  contains data for a non-current ASID.  The fix is to
+	  invalidate the icache when changing the mm context.
 
 	  If unsure, say Y.
 
@@ -658,13 +678,13 @@ config TIMA_LKMAUTH
 	  want TIMA enabled.
 
 config TIMA_RKP
-	depends on TIMA
 	default n
 	bool "Samsung KNOX realtime kernel protection depends on TIMA"
 	help
 	  this enables realtime kernel protection
 
 config TIMA_RKP_DEBUG
+	depends on !SEC_FACTORY
 	depends on TIMA_RKP
 	default n
 	bool "Support SS Sentinel for debugging"
@@ -673,6 +693,7 @@ config TIMA_RKP_DEBUG
 
 config RKP_KDP
 	bool "Protection for cred structure"
+	depends on !SEC_FACTORY
 	depends on TIMA_RKP
 	default n
 	help
@@ -680,6 +701,7 @@ config RKP_KDP
 
 config RKP_NS_PROT
 	bool "Protection for namespace structure"
+	depends on !SEC_FACTORY
 	depends on RKP_KDP
 	default n
 	help
@@ -687,6 +709,7 @@ config RKP_NS_PROT
 
 config RKP_DMAP_PROT
 	bool "Page Double Mapping protection"
+	depends on !SEC_FACTORY
 	depends on RKP_KDP
 	default n
 	help
